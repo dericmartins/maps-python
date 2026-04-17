@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rota Multimodal</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      height: 100vh;
+    }
+
+    .sidebar {
+      padding: 16px;
+      border-right: 1px solid #ddd;
+      background: #fafafa;
+      overflow: auto;
+    }
+
+    .sidebar h1 {
+      margin-top: 0;
+      font-size: 22px;
+    }
+
+    .field {
+      margin-bottom: 12px;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .field input,
+    .field select,
+    .field button {
+      width: 100%;
+      padding: 10px;
+      font-size: 14px;
+    }
+
+    .field button {
+      cursor: pointer;
+    }
+
+    .hint {
+      margin-top: 4px;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .card {
+      margin-top: 14px;
+      padding: 12px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+
+    .leg {
+      padding: 8px 0;
+      border-bottom: 1px solid #eee;
+      font-size: 14px;
+    }
+
+    .leg:last-child {
+      border-bottom: 0;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+      margin-right: 8px;
+    }
+
+    .road { background: #16a34a; }
+    .sea { background: #2563eb; }
+
+    .mono {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 12px;
+      max-height: 240px;
+      overflow: auto;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <h1>Rota Multimodal</h1>
+
+    <div class="field">
+      <label for="originName">Nome da origem</label>
+      <input id="originName" value="Blumenau" />
+    </div>
+
+    <div class="field">
+      <label for="originLat">Origem latitude</label>
+      <input id="originLat" type="number" step="any" value="-26.9164" />
+    </div>
+
+    <div class="field">
+      <label for="originLng">Origem longitude</label>
+      <input id="originLng" type="number" step="any" value="-49.0717" />
+    </div>
+
+    <div class="field">
+      <label for="destName">Nome do destino</label>
+      <input id="destName" value="Bogotá" />
+    </div>
+
+    <div class="field">
+      <label for="destLat">Destino latitude</label>
+      <input id="destLat" type="number" step="any" value="4.7110" />
+    </div>
+
+    <div class="field">
+      <label for="destLng">Destino longitude</label>
+      <input id="destLng" type="number" step="any" value="-74.0721" />
+      <div class="hint">Agora pode testar cidade do interior também.</div>
+    </div>
+
+    <div class="field">
+      <label for="units">Unidade</label>
+      <select id="units">
+        <option value="km" selected>km</option>
+        <option value="mi">mi</option>
+        <option value="m">m</option>
+        <option value="ft">ft</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <button id="calculateBtn">Calcular rota multimodal</button>
+    </div>
+
+    <div class="card">
+      <strong>Resumo</strong>
+      <div id="summary">Sem cálculo ainda.</div>
+    </div>
+
+    <div class="card">
+      <strong>Legs</strong>
+      <div id="legs">Sem legs ainda.</div>
+    </div>
+
+    <div class="card">
+      <strong>JSON</strong>
+      <div id="jsonOutput" class="mono">{}</div>
+    </div>
+  </aside>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map("map").setView([-15, -55], 4);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+
+    let routeLayer = null;
+    let markersLayer = null;
+
+    function clearLayers() {
+      if (routeLayer) {
+        map.removeLayer(routeLayer);
+        routeLayer = null;
+      }
+      if (markersLayer) {
+        map.removeLayer(markersLayer);
+        markersLayer = null;
+      }
+    }
+
+    function styleFeature(feature) {
+      const mode = feature?.properties?.mode;
+
+      if (mode === "road") {
+        return {
+          color: "#16a34a",
+          weight: 4
+        };
+      }
+
+      return {
+        color: "#2563eb",
+        weight: 4
+      };
+    }
+
+    async function calculateRoute() {
+      clearLayers();
+
+      const payload = {
+        origin: {
+          name: document.getElementById("originName").value,
+          latitude: Number(document.getElementById("originLat").value),
+          longitude: Number(document.getElementById("originLng").value)
+        },
+        destination: {
+          name: document.getElementById("destName").value,
+          latitude: Number(document.getElementById("destLat").value),
+          longitude: Number(document.getElementById("destLng").value)
+        },
+        units: document.getElementById("units").value
+      };
+
+      document.getElementById("summary").innerText = "Calculando...";
+      document.getElementById("legs").innerText = "Calculando...";
+      document.getElementById("jsonOutput").innerText = JSON.stringify(payload, null, 2);
+
+      try {
+        const response = await fetch("/route/multimodal", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.detail || "Erro ao calcular rota");
+        }
+
+        routeLayer = L.geoJSON(data.geojson, {
+          style: styleFeature
+        }).addTo(map);
+
+        const origin = payload.origin;
+        const destination = payload.destination;
+        const originPort = data.selected_ports.origin_port;
+        const destinationPort = data.selected_ports.destination_port;
+
+        markersLayer = L.layerGroup([
+          L.marker([origin.latitude, origin.longitude]).bindPopup(`Origem: ${origin.name}`),
+          L.marker([originPort.latitude, originPort.longitude]).bindPopup(`Porto origem: ${originPort.name}`),
+          L.marker([destinationPort.latitude, destinationPort.longitude]).bindPopup(`Porto destino: ${destinationPort.name}`),
+          L.marker([destination.latitude, destination.longitude]).bindPopup(`Destino: ${destination.name}`)
+        ]).addTo(map);
+
+        const bounds = routeLayer.getBounds();
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [30, 30] });
+        }
+
+        document.getElementById("summary").innerHTML = `
+          <div><strong>Distância total:</strong> ${Number(data.summary.distance).toFixed(2)} ${data.summary.units}</div>
+          <div><strong>Porto origem:</strong> ${data.selected_ports.origin_port.name}</div>
+          <div><strong>Porto destino:</strong> ${data.selected_ports.destination_port.name}</div>
+        `;
+
+        const legsHtml = data.legs.map(leg => `
+        <div class="leg">
+            <span class="badge ${leg.mode}">${leg.mode}</span>
+            <strong>${leg.from}</strong> → <strong>${leg.to}</strong><br/>
+            Distância: ${Number(leg.distance).toFixed(2)} ${leg.units}<br/>
+            Provider: ${leg.provider || "-"}
+        </div>
+        `).join("");
+
+        document.getElementById("legs").innerHTML = legsHtml;
+        document.getElementById("jsonOutput").innerText = JSON.stringify(data, null, 2);
+      } catch (error) {
+        document.getElementById("summary").innerText = `Erro: ${error.message}`;
+        document.getElementById("legs").innerText = "-";
+      }
+    }
+
+    document.getElementById("calculateBtn").addEventListener("click", calculateRoute);
+
+    calculateRoute();
+  </script>
+</body>
+</html>
