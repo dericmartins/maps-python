@@ -3,10 +3,10 @@
 ## Screenshots
 
 ### Visualização da rota multimodal
-<img src="docs/images/multimodal-route-estimator.png.png" alt="Mapa multimodal" width="900" />
+<img src="docs/images/multimodal-route-estimator.png" alt="Mapa multimodal" width="900" />
 
 ### Execução no GitHub Codespaces
-<img src="docs/images/vscode.png.png" alt="Execução no GitHub Codespaces" width="900" />
+<img src="docs/images/vscode.png" alt="Execução no GitHub Codespaces" width="900" />
 
 Aplicação simples para **estimar rotas multimodais de entrega internacional**, combinando:
 
